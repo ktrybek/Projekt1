@@ -12,6 +12,7 @@ def rain_possibility(rain_sum):
 
 csv_file = "weather_data.csv"
 
+
 def initialize_csv():
     if not os.path.exists(csv_file):
         with open(csv_file, "w", newline="") as file:
