@@ -1,77 +1,89 @@
 import datetime as dt
 import requests, os, csv
 
+class WeatherForecast:
+    def __init__(self, filename="weather_data.csv"):
+        self.filename = filename
+        self.data = {}
+        self.initialize_csv()
+        self.read_csv()
 
-def rain_possibility(rain_sum):
-    if rain_sum > 0.0:
-        return "Bedzie padac"
-    elif rain_sum == 0.0:
-        return "Nie bedzie padac"
-    else:
-        return "Nie wiem"
+    def initialize_csv(self):
+        if not os.path.exists(self.filename):
+            with open(self.filename, "w", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow(["Date", "Rain Info"])
 
-csv_file = "weather_data.csv"
+    def read_csv(self):
+        with open(self.filename, "r", encoding="utf-8") as file:
+            reader = csv.reader(file)
+            next(reader)
+            for row in reader:
+                if len(row) >= 2:
+                    self.data[row[0]] = row[1]
 
-def initialize_csv():
-    if not os.path.exists(csv_file):
-        with open(csv_file, "w", newline="") as file:
+    def write_to_csv(self, date_str, info):
+        with open(self.filename, "a", encoding="utf-8", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["Date", "Rain Sum"])
+            writer.writerow([date_str, info])
 
-def read_csv_file():
-    with open(csv_file, "r") as file:
-        reader = csv.reader(file)
-        return list(reader)
+    def fetch_weather_from_api(self, date_str):
+        base_url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": "54.372158",
+            "longitude": "18.638306",
+            "daily": "rain_sum",
+            "start_date": date_str,
+            "end_date": date_str,
+        }
+        response = requests.get(base_url, params=params)
+        if response.status_code == 200:
+            data = response.json()
+            rain_sum = data["daily"]["rain_sum"][0]
+            return self.rain_interpretation(rain_sum)
+        else:
+            return "Brak danych"
 
-def write_csv_file(data):
-    with open(csv_file, "a", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerows(data)
+    def rain_interpretation(self, rain_sum):
+        if rain_sum > 0.0:
+            return "Będzie padać"
+        elif rain_sum == 0.0:
+            return "Nie będzie padać"
+        else:
+            return "Nie wiem"
 
+    def __getitem__(self, date_str):
+        if date_str in self.data:
+            return self.data[date_str]
+        else:
+            info = self.fetch_weather_from_api(date_str)
+            self.data[date_str] = info
+            self.write_to_csv(date_str, info)
+            return info
+
+    def __setitem__(self, date_str, info):
+        self.data[date_str] = info
+        self.write_to_csv(date_str, info)
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def items(self):
+        return ((date, forecast) for date, forecast in self.data.items())
 
 def main():
-    initialize_csv()
-    result = []
-    base_url = "https://api.open-meteo.com/v1/forecast"
+    weather_forecast = WeatherForecast()
 
-    date_input = input("Podaj dla którego dnia chcesz sprawdzić prognozę (w formacie YYYY-MM-DD): ")
+    date_input = input("Podaj dzień, dla którego chcesz sprawdzić prognozę (YYYY-MM-DD): ")
     if not date_input:
-        date = (dt.datetime.today() + dt.timedelta(days=1)).date()
+        date_str = (dt.datetime.today() + dt.timedelta(days=1)).date().isoformat()
     else:
         try:
-            date = dt.datetime.strptime(date_input, "%Y-%m-%d").date()
+            date_str = dt.datetime.strptime(date_input, "%Y-%m-%d").date().isoformat()
         except ValueError:
             print("Nieprawidłowy format daty.")
-            return
+            exit()
 
-    date_str = date.isoformat()
-    records = read_csv_file()
-
-    for row in records[1:]:
-        if row[0] == date_str:
-            print(f"Dla dnia {date_str} prognoza jest następująca: {row[1]}")
-            return
-
-    params = {
-        "latitude": "54.372158",
-        "longitude": "18.638306",
-        "daily": "rain_sum",
-        "start_date": date_str,
-        "end_date": date_str,
-    }
-
-    response = requests.get(base_url, params=params)
-
-    if response.status_code == 200:
-        data = response.json()
-        rain_sum = data["daily"]["rain_sum"][0]
-        info = rain_possibility(rain_sum)
-        print(f"Suma opadów: {rain_sum} mm – {info}")
-        result.append([date_str, info])
-        write_csv_file(result)
-        print("Dane zapisano do pliku.")
-    else:
-        print(f"Błąd pobierania danych: {response.status_code}")
-
+    print(f"Dla dnia {date_str} prognoza jest następująca: {weather_forecast[date_str]}")
 
 main()
